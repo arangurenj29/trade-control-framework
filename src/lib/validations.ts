@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const phaseOptions = ["Fase 0", "Fase 1", "Fase 2", "Fase 3"] as const;
+export const levelOptions = ["Nivel 1", "Nivel 2", "Nivel 3"] as const;
+
 export const horariosSchema = z.object({
   session_start: z.string().min(5),
   session_end: z.string().min(5),
@@ -15,8 +18,14 @@ export const planSchema = z.object({
   no_trade_days: z.array(z.string()),
   apalancamiento_btceth_max: z.number().positive().max(50),
   apalancamiento_alts_max: z.number().positive().max(100),
-  fase_actual: z.string().min(1),
-  nivel_actual: z.string().min(1),
+  fase_actual: z.enum(phaseOptions),
+  nivel_actual: z.enum(levelOptions),
+  plan_start_date: z
+    .string()
+    .min(10)
+    .refine((value) => !Number.isNaN(Date.parse(value)), {
+      message: "Fecha de inicio inválida"
+    }),
   notes: z.string().optional()
 });
 

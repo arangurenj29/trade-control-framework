@@ -1,14 +1,20 @@
-const SERVER_ENABLED = process.env.DEBUG_LOGS === "true";
-const CLIENT_ENABLED = process.env.NEXT_PUBLIC_DEBUG_LOGS === "true";
+function serverDebugEnabled() {
+  return (process.env.DEBUG_LOGS ?? "false").toLowerCase() === "true";
+}
+
+function clientDebugEnabled() {
+  return (typeof window !== "undefined" &&
+    (process.env.NEXT_PUBLIC_DEBUG_LOGS ?? "false").toLowerCase() === "true");
+}
 
 export async function logDebug(event: string, payload?: unknown) {
   if (typeof window === "undefined") {
-    if (!SERVER_ENABLED) return;
+    if (!serverDebugEnabled()) return;
     console.info("[DEBUG]", new Date().toISOString(), event, payload ?? null);
     return;
   }
 
-  if (!CLIENT_ENABLED) return;
+  if (!clientDebugEnabled()) return;
 
   try {
     await fetch("/api/debug-log", {

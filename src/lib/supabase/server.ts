@@ -4,6 +4,9 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types";
 import { env } from "@/lib/env";
 
+let warnedSet = false;
+let warnedRemove = false;
+
 export function createServerSupabaseClient() {
   const cookieStore = cookies();
 
@@ -16,8 +19,9 @@ export function createServerSupabaseClient() {
         try {
           cookieStore.set({ name, value, ...(options ?? {}) });
         } catch (error) {
-          if (process.env.DEBUG_LOGS === "true") {
+          if (!warnedSet) {
             console.warn("[Supabase] cookie set skipped:", (error as Error).message);
+            warnedSet = true;
           }
         }
       },
@@ -25,8 +29,9 @@ export function createServerSupabaseClient() {
         try {
           cookieStore.set({ name, value: "", ...(options ?? {}) });
         } catch (error) {
-          if (process.env.DEBUG_LOGS === "true") {
+          if (!warnedRemove) {
             console.warn("[Supabase] cookie remove skipped:", (error as Error).message);
+            warnedRemove = true;
           }
         }
       }

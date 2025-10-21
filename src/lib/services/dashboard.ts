@@ -53,7 +53,10 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
         r_disponible: Number(plan.patrimonio) * (Number(plan.r_pct) / 100),
         sl_restante_dia: Number(plan.sl_diario_r) - Math.min(Number(metrics?.pnl_r_dia ?? 0), 0),
         sl_restante_semana:
-          Number(plan.sl_semanal_r) - Math.min(Number(metrics?.pnl_r_semana ?? 0), 0)
+          Number(plan.sl_semanal_r) - Math.min(Number(metrics?.pnl_r_semana ?? 0), 0),
+        apalancamiento_btceth_max: Number(plan.apalancamiento_btceth_max ?? 0),
+        apalancamiento_alts_max: Number(plan.apalancamiento_alts_max ?? 0),
+        plan_start_date: plan.effective_from?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
       }
     : null;
 

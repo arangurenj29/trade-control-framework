@@ -152,7 +152,7 @@ export default async function AscensoPage() {
             <p>
               Cada trade registra tanto los datos técnicos (fecha, activo, R esperado vs. real, error técnico)
               como el estado emocional (energía, foco, emoción dominante y aprendizaje). Los KPIs que
-              observamos en el dashboard se enfocan en mantener: Winrate ≥ 50 %, R:R ≥ 2, Expectancy > 0,
+              observamos en el dashboard se enfocan en mantener: Winrate ≥ 50 %, R:R ≥ 2, Expectancy &gt; 0,
               Drawdown mensual ≤ 10 % y errores emocionales &lt; 15 %.
             </p>
           </section>

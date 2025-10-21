@@ -2,6 +2,7 @@ import { requireSessionProfile } from "@/lib/auth";
 import { PlanEditor } from "@/components/plan/plan-editor";
 import { PlanHistory } from "@/components/plan/plan-history";
 import { getPlanData } from "@/lib/services/plan";
+import { levelOptions, phaseOptions } from "@/lib/validations";
 
 export default async function PlanPage() {
   const profile = await requireSessionProfile();
@@ -24,6 +25,13 @@ export default async function PlanPage() {
 }
 
 function mapPlanToForm(plan: NonNullable<Awaited<ReturnType<typeof getPlanData>>["activePlan"]>) {
+  const safePhase = phaseOptions.includes(plan.fase_actual as (typeof phaseOptions)[number])
+    ? plan.fase_actual
+    : phaseOptions[1];
+  const safeLevel = levelOptions.includes(plan.nivel_actual as (typeof levelOptions)[number])
+    ? plan.nivel_actual
+    : levelOptions[0];
+
   return {
     patrimonio: plan.patrimonio,
     r_pct: plan.r_pct,
@@ -33,8 +41,9 @@ function mapPlanToForm(plan: NonNullable<Awaited<ReturnType<typeof getPlanData>>
     no_trade_days: plan.no_trade_days,
     apalancamiento_btceth_max: plan.apalancamiento_btceth_max,
     apalancamiento_alts_max: plan.apalancamiento_alts_max,
-    fase_actual: plan.fase_actual,
-    nivel_actual: plan.nivel_actual,
+    fase_actual: safePhase,
+    nivel_actual: safeLevel,
+    plan_start_date: plan.plan_start_date,
     notes: plan.notes ?? ""
   };
 }

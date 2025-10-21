@@ -29,10 +29,47 @@ export default async function TradesPage() {
         </Button>
       </form>
 
+      <section className="grid gap-4 md:grid-cols-4">
+        <StatCard label="Balance disponible" value={formatCurrency(data.stats.available_balance ?? data.stats.balance)} />
+        <StatCard label="Equity" value={formatCurrency(data.stats.equity)} />
+        <StatCard label="PnL (día)" value={formatCurrency(data.stats.pnl_day)} highlight />
+        <StatCard label="PnL (semana)" value={formatCurrency(data.stats.pnl_week)} highlight />
+        <StatCard label="PnL (mes)" value={formatCurrency(data.stats.pnl_month)} highlight className="md:col-span-2" />
+      </section>
+
       <TradesTable
         openTrades={data.openTrades}
         closedTrades={data.closedTrades}
       />
     </div>
   );
+}
+
+function StatCard({
+  label,
+  value,
+  highlight,
+  className
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-xl border bg-card p-4 ${className ?? ""}`}>
+      <div className="text-xs uppercase text-muted-foreground">{label}</div>
+      <div className={`mt-2 text-xl font-semibold ${highlight ? "text-primary" : ""}`}>{value}</div>
+    </div>
+  );
+}
+
+function formatCurrency(value: number | null) {
+  if (value === null || Number.isNaN(value)) return "—";
+  return value.toLocaleString("es-ES", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 }

@@ -40,6 +40,11 @@ Supabase usa RLS, por lo que crea al menos un usuario vía panel o `auth.signInW
 - `src/lib/services/*`: consultas y agregados para UI/Jobs.
 - `supabase/migrations`: esquema, índices y políticas RLS.
 
+## Dashboard
+- Semáforo diario con análisis detallado y refresco manual.
+- Camino de Ascenso con métricas, rachas y XP.
+- Calculadora de posición nocional para estimar tamaño usando capital, % y apalancamiento.
+
 ## Tests
 Se usa Vitest. Ejecuta `npm test`. Incluye prueba de prompt determinista como ejemplo.
 
@@ -66,6 +71,7 @@ Se usa Vitest. Ejecuta `npm test`. Incluye prueba de prompt determinista como ej
 
 ## Trades automatizados
 - La aplicación lee las operaciones desde la tabla `trades` (puedes sembrar datos con `docs/sql/seed_dashboard_samples.sql`).
+- Define la fecha de inicio del plan en la sección “Mi Plan” y conecta tu cuenta de Bybit en `/integraciones`. Las credenciales se cifran antes de guardarse y puedes sincronizar hasta 90 días de historial cerrado (PnL). Cada sincronización almacena los registros en `bybit_pnl_history`, actualiza la tabla `trades` y toma un snapshot de balance para alimentar dashboard/ascenso.
 - El botón “Recalcular métricas” en `/trades` ejecuta las acciones de recomputo (`recomputeMetricsFromTrades` + `recomputeAscensoFromTrades`) y refresca Dashboard/Ascenso/Reportes.
 - Tras recalcular, `evaluatePlanProgress` aplica automáticamente las reglas de ascenso/descenso:
   * Promoción: cumplimiento ≥ 85% y (10 días verdes consecutivos o 10 TPs en la última semana).

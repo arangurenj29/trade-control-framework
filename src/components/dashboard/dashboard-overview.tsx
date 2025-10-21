@@ -10,6 +10,7 @@ import { InfoBadge } from "@/components/ui/info-badge";
 import type { DashboardData } from "@/lib/dto";
 import { cn } from "@/lib/utils";
 import { refreshSemaforoAction } from "@/lib/actions/semaforo";
+import { NotionalCalculator } from "@/components/dashboard/notional-calculator";
 
 const estadoConfig: Record<
   NonNullable<DashboardData["semaforo"]>["estado"],
@@ -237,6 +238,14 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
         </CardContent>
       </Card>
 
+      <NotionalCalculator
+        className="lg:col-span-2"
+        defaultCapital={data.plan?.patrimonio ?? null}
+        defaultLeverage={data.plan?.apalancamiento_btceth_max ?? null}
+        defaultRiskPercent={data.plan?.r_pct ?? null}
+        planLevel={data.plan?.nivel_actual ?? null}
+      />
+
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Ruta de Disciplina</CardTitle>
@@ -369,7 +378,7 @@ function AscensoSnapshot({
         <div className="text-xs uppercase text-muted-foreground">Insignias recientes</div>
         {ascenso.badges.length > 0 ? (
           <div className="flex flex-wrap gap-2">
-            {ascenso.badges.map((badge) => (
+            {ascenso.badges.map((badge: string) => (
               <Badge key={badge} variant="outline">
                 {badge}
               </Badge>

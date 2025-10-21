@@ -38,6 +38,7 @@ export async function upsertPlanAction(rawValues: unknown) {
     apalancamiento_alts_max: parsed.data.apalancamiento_alts_max,
     fase_actual: parsed.data.fase_actual,
     nivel_actual: parsed.data.nivel_actual,
+    effective_from: new Date(parsed.data.plan_start_date).toISOString(),
     notes: parsed.data.notes,
     updated_at: new Date().toISOString()
   });

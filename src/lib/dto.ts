@@ -17,6 +17,9 @@ export type PlanSummary = {
   r_disponible: number;
   sl_restante_dia: number;
   sl_restante_semana: number;
+  apalancamiento_btceth_max: number;
+  apalancamiento_alts_max: number;
+  plan_start_date: string;
 };
 
 export type PlanDetail = PlanSummary & {
@@ -40,6 +43,7 @@ export type PlanVersion = {
   sl_semanal_r: number;
   fase_actual: string;
   nivel_actual: string;
+  plan_start_date: string;
   effective_from: string;
   updated_at: string;
 };
@@ -98,6 +102,16 @@ export type TradeListItem = {
 export type TradesPageData = {
   openTrades: TradeListItem[];
   closedTrades: TradeListItem[];
+  stats: TradesStats;
+};
+
+export type TradesStats = {
+  balance: number | null;
+  equity: number | null;
+  available_balance: number | null;
+  pnl_day: number;
+  pnl_week: number;
+  pnl_month: number;
 };
 
 export type AscensoPageData = {
