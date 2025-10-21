@@ -29,12 +29,16 @@ export type BybitConnectionCardProps = {
     updated_at: string;
   } | null;
   processedCount: number;
+  rawCount: number;
+  closedCount: number;
   syncWindowDays: number;
 };
 
 export function BybitConnectionCard({
   connection,
   processedCount,
+  rawCount,
+  closedCount,
   syncWindowDays
 }: BybitConnectionCardProps) {
   const [formState, formAction] = useFormState(upsertBybitConnectionAction, initialFormState);
@@ -154,8 +158,19 @@ export function BybitConnectionCard({
           <p className="font-semibold text-foreground">Resumen</p>
           <ul className="mt-2 space-y-1 text-muted-foreground">
             <li>
-              Trades procesados: <span className="font-medium text-foreground">{processedCount}</span>
+              Fills crudos almacenados: <span className="font-medium text-foreground">{rawCount}</span>
             </li>
+            <li>
+              Órdenes cerradas (PnL): <span className="font-medium text-foreground">{closedCount}</span>
+            </li>
+            <li>
+              Trades procesados en historial: <span className="font-medium text-foreground">{processedCount}</span>
+            </li>
+            {closedCount > processedCount ? (
+              <li className="text-xs text-amber-600">
+                Hay operaciones cerradas sin reflejar en el historial. Ejecuta la sincronización para empatar los datos.
+              </li>
+            ) : null}
             <li>Ventana de sincronización: {syncWindowDays} días hacia atrás.</li>
             {connection?.created_at ? (
               <li>Conectado desde: {formatTimestamp(connection.created_at)}</li>

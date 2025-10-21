@@ -261,8 +261,7 @@ async function fetchClosedPnlPage({
     category: CATEGORY,
     limit: PNL_PAGE_LIMIT.toString(),
     startTime: Math.floor(startTime).toString(),
-    endTime: Math.floor(windowEnd).toString(),
-    settleCoin: "USDT"
+    endTime: Math.floor(windowEnd).toString()
   });
 
   if (cursor) params.set("cursor", cursor);
@@ -273,14 +272,14 @@ async function fetchClosedPnlPage({
   const signature = createSignature({ apiKey, apiSecret, timestamp, recvWindow, query });
 
   await logDebug("bybit.api:request", {
-    path: "/v5/account/closed-pnl",
+    path: "/v5/position/closed-pnl",
     query,
     cursor: cursor ?? null,
     start_time: new Date(startTime).toISOString(),
     end_time: new Date(windowEnd).toISOString()
   });
 
-  const response = await fetch(`${BASE_URL}/v5/account/closed-pnl?${query}`, {
+  const response = await fetch(`${BASE_URL}/v5/position/closed-pnl?${query}`, {
     method: "GET",
     headers: {
       "X-BAPI-API-KEY": apiKey,
@@ -298,6 +297,15 @@ async function fetchClosedPnlPage({
       statusText: response.statusText,
       body: bodyText
     });
+
+    if (response.status === 404) {
+      return {
+        items: [],
+        nextCursor: null,
+        windowEnd
+      };
+    }
+
     throw new Error(`Bybit API error (${response.status}): ${bodyText || "closed pnl endpoint returned 404"}`);
   }
 
@@ -399,6 +407,8 @@ export async function fetchWalletBalance({
     result?: {
       list?: Array<{
         totalEquity?: string;
+        totalWalletBalance?: string;
+        totalAvailableBalance?: string;
         availableToWithdraw?: string;
         coin: Array<{ equity?: string; availableBalance?: string; coin?: string }>;
       }>;
@@ -419,9 +429,30 @@ export async function fetchWalletBalance({
   if (!account) return null;
 
   const usdt = account.coin?.find((c) => c.coin === "USDT") ?? account.coin?.[0];
+  const walletBalance =
+    account.totalWalletBalance !== undefined
+      ? Number(account.totalWalletBalance)
+      : usdt?.availableBalance !== undefined
+        ? Number(usdt.availableBalance)
+        : 0;
+  const availableBalance =
+    account.totalAvailableBalance !== undefined
+      ? Number(account.totalAvailableBalance)
+      : account.availableToWithdraw !== undefined
+        ? Number(account.availableToWithdraw)
+        : usdt?.availableBalance !== undefined
+          ? Number(usdt.availableBalance)
+          : 0;
+  const equity =
+    account.totalEquity !== undefined
+      ? Number(account.totalEquity)
+      : usdt?.equity !== undefined
+        ? Number(usdt.equity)
+        : walletBalance;
+
   return {
-    balance: Number(usdt?.availableBalance ?? 0),
-    equity: Number(account.totalEquity ?? usdt?.equity ?? 0),
-    available_balance: Number(account.availableToWithdraw ?? usdt?.availableBalance ?? 0)
+    balance: walletBalance,
+    equity,
+    available_balance: availableBalance
   };
 }

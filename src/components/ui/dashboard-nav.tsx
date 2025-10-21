@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, NotebookPen, CandlestickChart, Sparkles, FileBarChart2, HeartPulse, Plug2 } from "lucide-react";
+import { LayoutDashboard, NotebookPen, CandlestickChart, Sparkles, HeartPulse, Plug2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -11,7 +11,6 @@ const navItems = [
   { href: "/trades", label: "Trades", icon: CandlestickChart },
   { href: "/bitacora", label: "Bitácora", icon: HeartPulse },
   { href: "/ascenso", label: "Ascenso", icon: Sparkles },
-  { href: "/reportes", label: "Reportes", icon: FileBarChart2 },
   { href: "/integraciones", label: "Integraciones", icon: Plug2 }
 ];
 

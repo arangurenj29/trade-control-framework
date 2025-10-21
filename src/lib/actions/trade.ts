@@ -130,7 +130,6 @@ export async function recomputeTradingSnapshotsAction() {
   revalidatePath("/trades");
   revalidatePath("/ascenso");
   revalidatePath("/plan");
-  revalidatePath("/reportes");
 }
 
 const MAX_LEVEL = 3;

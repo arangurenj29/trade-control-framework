@@ -7,8 +7,8 @@ import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { env } from "@/lib/env";
 import {
   fetchClosedPnlWindow,
-  fetchWalletBalance,
-  fetchExecutionsWindow
+  fetchExecutionsWindow,
+  fetchWalletBalance
 } from "@/lib/services/bybit";
 import { ingestBybitClosedPnl, ingestBybitExecutions } from "@/lib/services/bybit-transform";
 import { recomputeAscensoFromTrades, recomputeMetricsFromTrades } from "@/lib/actions/trade";
@@ -243,33 +243,36 @@ export async function syncBybitTradesAction(): Promise<SyncBybitActionState> {
     } catch (error) {
       const message = (error as Error).message ?? "Unknown error";
       await logDebug("bybit.sync:closed_pnl_failed", { message });
+    }
 
-      if (message.includes("404")) {
+    if (closedPnl && closedPnl.length > 0) {
+      await logDebug("bybit.sync:received", {
+        count: closedPnl.length,
+        sample: closedPnl.slice(0, Math.min(3, closedPnl.length))
+      });
+    } else {
+      try {
         fallbackExecutions = await fetchExecutionsWindow({
           apiKey,
           apiSecret,
           startTime,
           endTime: now
         });
-      } else {
+
+        if (fallbackExecutions && fallbackExecutions.length > 0) {
+          await logDebug("bybit.sync:received_fallback", {
+            count: fallbackExecutions.length,
+            sample: fallbackExecutions.slice(0, Math.min(3, fallbackExecutions.length))
+          });
+        }
+      } catch (error) {
+        const message = (error as Error).message ?? "Unknown error";
+        await logDebug("bybit.sync:fallback_failed", { message });
         throw error;
       }
     }
 
-    if (closedPnl) {
-      await logDebug("bybit.sync:received", {
-        count: closedPnl.length,
-        sample: closedPnl.slice(0, Math.min(3, closedPnl.length))
-      });
-    }
-    if (fallbackExecutions) {
-      await logDebug("bybit.sync:received_fallback", {
-        count: fallbackExecutions.length,
-        sample: fallbackExecutions.slice(0, Math.min(3, fallbackExecutions.length))
-      });
-    }
-
-    if ((closedPnl && closedPnl.length === 0) || (!closedPnl && (!fallbackExecutions || fallbackExecutions.length === 0))) {
+    if ((!closedPnl || closedPnl.length === 0) && (!fallbackExecutions || fallbackExecutions.length === 0)) {
       revalidatePath(REVALIDATE_PATH);
       return {
         status: "success",
@@ -281,10 +284,10 @@ export async function syncBybitTradesAction(): Promise<SyncBybitActionState> {
 
     let upserts = 0;
 
-    if (closedPnl) {
+    if (closedPnl && closedPnl.length > 0) {
       const ingestResult = await ingestBybitClosedPnl(profile.id, closedPnl);
       upserts = ingestResult.upserts;
-    } else if (fallbackExecutions) {
+    } else if (fallbackExecutions && fallbackExecutions.length > 0) {
       const ingestResult = await ingestBybitExecutions(profile.id, fallbackExecutions, planStart);
       upserts = ingestResult.upserts;
     }
@@ -311,10 +314,12 @@ export async function syncBybitTradesAction(): Promise<SyncBybitActionState> {
       })
       .eq("id", connection.id);
 
-    const fillsCount = closedPnl ? closedPnl.length : fallbackExecutions?.length ?? 0;
+    const usedClosedPnl = Boolean(closedPnl && closedPnl.length > 0);
+    const fillsCount = usedClosedPnl ? closedPnl!.length : fallbackExecutions?.length ?? 0;
+    const consolidatedTrades = upserts;
 
     await logDebug("bybit.sync:consolidated", {
-      source: closedPnl ? "closed_pnl" : "executions",
+      source: usedClosedPnl ? "closed_pnl" : "executions",
       fills: fillsCount,
       consolidated_trades: upserts
     });
@@ -324,10 +329,10 @@ export async function syncBybitTradesAction(): Promise<SyncBybitActionState> {
       action: "bybit.sync",
       payload: {
         fills: fillsCount,
-        trades: upserts,
+        trades: consolidatedTrades,
         start_time: startTime,
         end_time: now,
-        source: closedPnl ? "closed_pnl" : "executions"
+        source: usedClosedPnl ? "closed_pnl" : "executions"
       }
     });
 
@@ -336,14 +341,13 @@ export async function syncBybitTradesAction(): Promise<SyncBybitActionState> {
     revalidatePath("/trades");
     revalidatePath("/ascenso");
     revalidatePath("/plan");
-    revalidatePath("/reportes");
-    const syncedFills = closedPnl ? closedPnl.length : fallbackExecutions?.length ?? 0;
-
     return {
       status: "success",
-      message: `Se procesaron ${syncedFills} fills (resultado: ${upserts} trades consolidados).`,
-      synced: syncedFills,
-      trades: upserts
+      message: usedClosedPnl
+        ? `Se importaron ${fillsCount} órdenes cerradas y se consolidaron ${consolidatedTrades} trades.`
+        : `Se procesaron ${fillsCount} fills (resultado: ${consolidatedTrades} trades consolidados).`,
+      synced: fillsCount,
+      trades: consolidatedTrades
     };
   } catch (error) {
     const message = (error as Error).message ?? "Error sincronizando trades.";

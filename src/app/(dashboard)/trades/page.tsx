@@ -3,10 +3,28 @@ import { TradesTable } from "@/components/trades/trades-table";
 import { getTradesPageData } from "@/lib/services/trade";
 import { recomputeTradingSnapshotsAction } from "@/lib/actions/trade";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-export default async function TradesPage() {
+type PageProps = {
+  searchParams: Record<string, string | string[] | undefined>;
+};
+
+export default async function TradesPage({ searchParams }: PageProps) {
   const profile = await requireSessionProfile();
-  const data = await getTradesPageData(profile.id);
+  const pageParam = Array.isArray(searchParams.page) ? searchParams.page[0] : searchParams.page;
+  const parsedPage = Number(pageParam);
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1;
+
+  const pageSizeParam = Array.isArray(searchParams.pageSize)
+    ? searchParams.pageSize[0]
+    : searchParams.pageSize;
+  const parsedPageSize = Number(pageSizeParam);
+  const pageSize =
+    Number.isFinite(parsedPageSize) && parsedPageSize > 0
+      ? Math.min(200, Math.floor(parsedPageSize))
+      : undefined;
+
+  const data = await getTradesPageData(profile.id, { page, pageSize });
 
   return (
     <div className="space-y-6">
@@ -29,18 +47,14 @@ export default async function TradesPage() {
         </Button>
       </form>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <StatCard label="Balance disponible" value={formatCurrency(data.stats.available_balance ?? data.stats.balance)} />
-        <StatCard label="Equity" value={formatCurrency(data.stats.equity)} />
-        <StatCard label="PnL (día)" value={formatCurrency(data.stats.pnl_day)} highlight />
-        <StatCard label="PnL (semana)" value={formatCurrency(data.stats.pnl_week)} highlight />
-        <StatCard label="PnL (mes)" value={formatCurrency(data.stats.pnl_month)} highlight className="md:col-span-2" />
+      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Balance" value={data.stats.balance} />
+        <StatCard label="Balance disponible" value={data.stats.available_balance} />
+        <StatCard label="Equity" value={data.stats.equity} />
+        <StatCard label="PnL (mes)" value={data.stats.pnl_month} signed />
       </section>
 
-      <TradesTable
-        openTrades={data.openTrades}
-        closedTrades={data.closedTrades}
-      />
+      <TradesTable trades={data.closedTrades} pagination={data.pagination} />
     </div>
   );
 }
@@ -48,28 +62,47 @@ export default async function TradesPage() {
 function StatCard({
   label,
   value,
-  highlight,
+  signed = false,
   className
 }: {
   label: string;
-  value: string;
-  highlight?: boolean;
+  value: number | null;
+  signed?: boolean;
   className?: string;
 }) {
+  const formattedValue = formatCurrency(value, { signed });
+  const toneClass =
+    value === null
+      ? "text-muted-foreground"
+      : value > 0
+        ? "text-emerald-500"
+        : value < 0
+          ? "text-rose-500"
+          : "text-foreground";
+
   return (
-    <div className={`rounded-xl border bg-card p-4 ${className ?? ""}`}>
-      <div className="text-xs uppercase text-muted-foreground">{label}</div>
-      <div className={`mt-2 text-xl font-semibold ${highlight ? "text-primary" : ""}`}>{value}</div>
+    <div className={cn("min-h-[96px] min-w-[160px] rounded-xl border bg-card p-4 shadow-sm", className)}>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div
+        className={cn(
+          "mt-2 text-lg font-semibold leading-tight tabular-nums break-words",
+          toneClass
+        )}
+        title={formattedValue}
+      >
+        {formattedValue}
+      </div>
     </div>
   );
 }
 
-function formatCurrency(value: number | null) {
+function formatCurrency(value: number | null, { signed = false }: { signed?: boolean } = {}) {
   if (value === null || Number.isNaN(value)) return "—";
-  return value.toLocaleString("es-ES", {
+  return new Intl.NumberFormat("es-ES", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+    maximumFractionDigits: 2,
+    ...(signed ? { signDisplay: "always" as const } : {})
+  }).format(value);
 }

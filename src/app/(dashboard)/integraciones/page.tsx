@@ -1,13 +1,15 @@
 import { requireSessionProfile } from "@/lib/auth";
 import { BybitConnectionCard } from "@/components/bybit/bybit-connection-card";
-import { countProcessedTrades, getBybitConnection } from "@/lib/services/bybit";
+import { countBybitClosedPnl, countProcessedTrades, countRawBybitTrades, getBybitConnection } from "@/lib/services/bybit";
 import { env } from "@/lib/env";
 
 export default async function IntegracionesPage() {
   const profile = await requireSessionProfile();
-  const [connection, processedTrades] = await Promise.all([
+  const [connection, processedTrades, rawTrades, closedTrades] = await Promise.all([
     getBybitConnection(profile.id),
-    countProcessedTrades(profile.id)
+    countProcessedTrades(profile.id),
+    countRawBybitTrades(profile.id),
+    countBybitClosedPnl(profile.id)
   ]);
 
   return (
@@ -22,6 +24,8 @@ export default async function IntegracionesPage() {
       <BybitConnectionCard
         connection={connection}
         processedCount={processedTrades}
+        rawCount={rawTrades}
+        closedCount={closedTrades}
         syncWindowDays={env.bybitSyncDays}
       />
     </div>

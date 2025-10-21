@@ -91,49 +91,41 @@ export type TradeListItem = {
   sl: number;
   leverage: number;
   size_nominal: number;
+  quantity: number | null;
+  exit_price: number | null;
+  close_volume: number | null;
   risk_en_r: number;
+  risk_monetario: number | null;
   status: "open" | "closed" | "invalid";
   open_time: string;
   close_time: string | null;
   pnl_r: number | null;
+  pnl_monetario: number | null;
   cumplimiento_flags: string[];
 };
 
 export type TradesPageData = {
-  openTrades: TradeListItem[];
   closedTrades: TradeListItem[];
   stats: TradesStats;
+  pagination: TradesPagination;
 };
 
 export type TradesStats = {
   balance: number | null;
   equity: number | null;
   available_balance: number | null;
-  pnl_day: number;
-  pnl_week: number;
   pnl_month: number;
+};
+
+export type TradesPagination = {
+  page: number;
+  pageSize: number;
+  total: number;
 };
 
 export type AscensoPageData = {
   summary: AscensoSummary | null;
   missions: Mission[];
-};
-
-export type WeeklyReportData = {
-  rango: {
-    inicio: string;
-    fin: string;
-  };
-  pnl_r: number;
-  pnl_monetario: number;
-  cumplimiento_pct: number;
-  streak_dias_verdes: number;
-  violaciones: {
-    sl_diario: number;
-    sl_semanal: number;
-  };
-  recomendacion_fase: string | null;
-  trades: TradeListItem[];
 };
 
 export type EmotionalLog = {

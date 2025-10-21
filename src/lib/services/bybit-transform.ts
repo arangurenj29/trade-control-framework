@@ -18,6 +18,9 @@ type AggregatedTrade = {
   sl: number;
   leverage: number;
   size_nominal: number;
+  quantity: number | null;
+  exit_price: number | null;
+  close_volume: number | null;
   risk_monetario: number;
   risk_en_r: number;
   open_time: string;
@@ -75,20 +78,71 @@ function aggregateGroup(
   const side = String(payloadSample.side ?? "").toLowerCase() === "sell" ? "short" : "long";
   const leverage = parseNumber(payloadSample.leverage) || 1;
 
-  const totalQty = group.reduce((sum, item) => sum + Math.abs(parseNumber(item.payload?.execQty)), 0);
+  const totalQtyAbs = group.reduce((sum, item) => sum + Math.abs(parseNumber(item.payload?.execQty)), 0);
   const totalNotional = group.reduce(
     (sum, item) =>
       sum + Math.abs(parseNumber(item.payload?.execPrice) * parseNumber(item.payload?.execQty)),
     0
   );
-  const sizeNominal = group.reduce(
+  const rawOpenNotional = group.reduce(
     (sum, item) => sum + Math.abs(parseNumber(item.payload?.execValue)),
     0
   );
 
-  const entryPrice = totalQty > 0 ? totalNotional / totalQty : parseNumber(payloadSample.execPrice);
+  const closedQty = group.reduce((sum, item) => sum + Math.abs(parseNumber(item.payload?.closedSize)), 0);
+  const quantityMagnitude = closedQty > 0 ? closedQty : totalQtyAbs;
+  const entryPrice =
+    quantityMagnitude > 0 ? totalNotional / quantityMagnitude : parseNumber(payloadSample.execPrice);
+  const signedQuantity =
+    quantityMagnitude === 0 ? 0 : side === "short" ? -quantityMagnitude : quantityMagnitude;
+  const openNotional =
+    rawOpenNotional > 0
+      ? rawOpenNotional
+      : quantityMagnitude > 0
+        ? Math.abs(entryPrice) * quantityMagnitude
+        : 0;
 
-  const pnlMonetario = group.reduce((sum, item) => sum + parseNumber(item.payload?.closedPnl), 0);
+  const closeNotionalFromClosedSize = group.reduce((sum, item) => {
+    const closedSize = Math.abs(parseNumber(item.payload?.closedSize));
+    if (closedSize > 0) {
+      const execPrice = Math.abs(parseNumber(item.payload?.execPrice));
+      if (execPrice > 0) {
+        return sum + execPrice * closedSize;
+      }
+    }
+    return sum;
+  }, 0);
+
+  const closeNotionalFromExecType = group.reduce((sum, item) => {
+    const execType = String(item.payload?.execType ?? "").toLowerCase();
+    if (execType.includes("close")) {
+      const execQty = Math.abs(parseNumber(item.payload?.execQty));
+      const execPrice = Math.abs(parseNumber(item.payload?.execPrice));
+      if (execQty > 0 && execPrice > 0) {
+        return sum + execQty * execPrice;
+      }
+    }
+    return sum;
+  }, 0);
+
+  let exitPrice: number | null =
+    quantityMagnitude > 0 && closeNotionalFromClosedSize > 0
+      ? closeNotionalFromClosedSize / quantityMagnitude
+      : quantityMagnitude > 0 && closeNotionalFromExecType > 0
+        ? closeNotionalFromExecType / quantityMagnitude
+        : null;
+
+  let pnlMonetario = group.reduce((sum, item) => sum + parseNumber(item.payload?.closedPnl), 0);
+  const totalFees = group.reduce(
+    (sum, item) => sum + parseNumber(item.payload?.execFee ?? item.payload?.execFeeV2),
+    0
+  );
+
+  if ((pnlMonetario === 0 || !Number.isFinite(pnlMonetario)) && exitPrice !== null && Number.isFinite(exitPrice)) {
+    const gross = (exitPrice - entryPrice) * signedQuantity;
+    pnlMonetario = Number((gross - totalFees).toFixed(8));
+  }
+
   const pnlR =
     riskMonetario > 0 ? Number((pnlMonetario / riskMonetario).toFixed(2)) : (pnlMonetario !== 0 ? 0 : null);
 
@@ -105,11 +159,27 @@ function aggregateGroup(
         )
       : null;
 
-  const sl = computeStopLoss(entryPrice, riskMonetario, totalQty, side);
+  const sl = computeStopLoss(entryPrice, riskMonetario, quantityMagnitude, side);
 
   if (planStartMs !== null && openTimeMs < planStartMs) {
     return null;
   }
+
+  if (status !== "closed") {
+    return null;
+  }
+
+  if ((exitPrice === null || !Number.isFinite(exitPrice)) && signedQuantity !== 0) {
+    const derived = entryPrice + pnlMonetario / signedQuantity;
+    if (Number.isFinite(derived)) {
+      exitPrice = derived;
+    }
+  }
+
+  const closeVolume =
+    exitPrice !== null && Number.isFinite(exitPrice) && quantityMagnitude > 0
+      ? Math.abs(exitPrice) * quantityMagnitude
+      : null;
 
   return {
     user_id: userId,
@@ -120,7 +190,12 @@ function aggregateGroup(
     entry: Number(entryPrice.toFixed(4)),
     sl: Number(sl.toFixed(4)),
     leverage,
-    size_nominal: Number(sizeNominal.toFixed(2)),
+    size_nominal: Number(openNotional.toFixed(2)),
+    quantity: Number(signedQuantity.toFixed(6)),
+    exit_price:
+      exitPrice !== null && Number.isFinite(exitPrice) ? Number(exitPrice.toFixed(4)) : null,
+    close_volume:
+      closeVolume !== null && Number.isFinite(closeVolume) ? Number(closeVolume.toFixed(2)) : null,
     risk_monetario: Number(riskMonetario.toFixed(2)),
     risk_en_r: riskMonetario > 0 ? 1 : 0,
     open_time: new Date(openTimeMs).toISOString(),
@@ -233,21 +308,51 @@ export async function ingestBybitClosedPnl(userId: string, pnl: BybitClosedPnl[]
     ? Number(plan.patrimonio ?? 0) * (Number(plan.r_pct ?? 0) / 100)
     : 0;
 
+  const [{ error: clearTradesError }, { error: clearHistoryError }] = await Promise.all([
+    supabase
+      .from("trades")
+      .delete()
+      .eq("user_id", userId)
+      .not("external_id", "is", null),
+    supabase.from("bybit_pnl_history").delete().eq("user_id", userId)
+  ]);
+
+  if (clearTradesError) throw clearTradesError;
+  if (clearHistoryError) throw clearHistoryError;
+
   const tradesPayload = pnl.map((item) => {
-    const entryPrice = Number(item.avgEntryPrice ?? item.avg_exit_price ?? 0);
-    const exitPrice = Number(item.avgExitPrice ?? 0);
-    const qty = Number(item.qty ?? item.size ?? item.closedSize ?? 0);
+    let entryPrice = Number(item.avgEntryPrice ?? item.avg_exit_price ?? 0);
+    let exitPrice = Number(item.avgExitPrice ?? item.avg_exit_price ?? 0);
+    const rawQty = Number(item.qty ?? item.size ?? item.closedSize ?? 0);
     const pnlMonetario = Number(item.realisedPnl ?? item.closedPnl ?? 0);
-    const closedAt = Number(item.closedTime ?? 0);
-    const createdAt = Number(item.createdTime ?? item.closedTime ?? 0);
+    const closedAt = Number(
+      item.closedTime ?? item.updatedTime ?? item.createdTime ?? 0
+    );
+    const createdAt = Number(item.createdTime ?? item.closedTime ?? item.updatedTime ?? 0);
 
     const openTimeIso = new Date(createdAt).toISOString();
     const closeTimeIso = new Date(closedAt).toISOString();
-    const sizeNominal = qty * (entryPrice || exitPrice);
+    const quantityAbs = Math.abs(rawQty);
+    const side = String(item.side ?? "Buy").toLowerCase() === "sell" ? "short" : "long";
+    const signedQty = quantityAbs === 0 ? 0 : side === "short" ? -quantityAbs : quantityAbs;
+
+    if (!Number.isFinite(entryPrice) || entryPrice === 0) {
+      entryPrice = exitPrice || entryPrice;
+    }
+
+    if ((!Number.isFinite(exitPrice) || exitPrice === 0) && signedQty !== 0) {
+      const derivedExit = entryPrice + pnlMonetario / signedQty;
+      if (Number.isFinite(derivedExit)) {
+        exitPrice = derivedExit;
+      }
+    }
+
+    const basePrice = entryPrice || exitPrice;
+    const sizeNominal = quantityAbs * Math.abs(basePrice);
+    const closeVolume =
+      Number.isFinite(exitPrice) && exitPrice !== 0 ? quantityAbs * Math.abs(exitPrice) : null;
 
     const pnlR = riskMonetario > 0 ? Number((pnlMonetario / riskMonetario).toFixed(2)) : null;
-    const side = String(item.side ?? "Buy").toLowerCase() === "sell" ? "short" : "long";
-
     return {
       user_id: userId,
       symbol: item.symbol,
@@ -258,6 +363,10 @@ export async function ingestBybitClosedPnl(userId: string, pnl: BybitClosedPnl[]
       sl: 0,
       leverage: Number(item.leverage ?? 1),
       size_nominal: Number(sizeNominal.toFixed(2)),
+      quantity: Number(signedQty.toFixed(6)),
+      exit_price:
+        Number.isFinite(exitPrice) && exitPrice !== 0 ? Number(exitPrice.toFixed(4)) : null,
+      close_volume: closeVolume !== null ? Number(closeVolume.toFixed(2)) : null,
       risk_monetario: Number(riskMonetario.toFixed(2)),
       risk_en_r: riskMonetario > 0 ? 1 : 0,
       open_time: openTimeIso,
