@@ -135,6 +135,11 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
           )}
         </CardHeader>
         <CardContent className="space-y-3">
+          {data.semaforo?.error ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {data.semaforo.error}
+            </div>
+          ) : null}
           <div>
             <div className="text-xs uppercase text-muted-foreground">Acción sugerida</div>
             <p className="text-sm">

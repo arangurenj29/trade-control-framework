@@ -12,8 +12,8 @@ export const env = {
   supabaseUrl: getEnv("SUPABASE_URL"),
   supabaseAnonKey: getEnv("SUPABASE_ANON_KEY"),
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
-  openAIApiKey: process.env.OPENAI_API_KEY ?? "",
-  semaforoModel: process.env.GPT_SEMAFORO_MODEL ?? "gpt-4o-mini",
+  claudeApiKey: process.env.CLAUDE_API_KEY ?? "",
+  semaforoModel: process.env.CLAUDE_SEMAFORO_MODEL ?? "claude-3-5-sonnet-20240620",
   bybitEncryptionKey: getEnv("BYBIT_ENCRYPTION_KEY"),
-  bybitSyncDays: Number(process.env.BYBIT_SYNC_DAYS ?? "90")
+  bybitSyncDays: Number(process.env.BYBIT_SYNC_DAYS ?? "90"),
 };

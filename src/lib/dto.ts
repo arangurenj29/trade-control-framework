@@ -4,6 +4,7 @@ export type SemaforoState = {
   explicacion: string | null;
   computed_at: string | null;
   analisis: string | null;
+  error: string | null;
 };
 
 export type PlanSummary = {

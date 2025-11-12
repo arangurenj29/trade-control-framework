@@ -1,17 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { buildDefaultSemaforoInput } from "@/lib/services/semaforo";
 import { logDebug } from "@/lib/logger";
+import { getSiteUrl } from "@/lib/server-url";
 
 export async function refreshSemaforoAction() {
-  const payload = buildDefaultSemaforoInput();
-
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/api/semaforo`, {
+    const response = await fetch(`${getSiteUrl()}/api/semaforo`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ auto: true })
     });
 
     if (!response.ok) {
@@ -21,7 +19,11 @@ export async function refreshSemaforoAction() {
     }
 
     const result = await response.json();
-    await logDebug("semaforo:refresh_success", result);
+    if (!result.ok) {
+      await logDebug("semaforo:refresh_warning", result);
+    } else {
+      await logDebug("semaforo:refresh_success", result);
+    }
   } catch (error) {
     await logDebug("semaforo:refresh_exception", { message: (error as Error).message });
     throw error;
