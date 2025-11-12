@@ -1,9 +1,10 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { DashboardData, PlanSummary, SemaforoState } from "@/lib/dto";
+import { getEasternDateString } from "@/lib/dates";
 
 export async function getDashboardData(userId: string): Promise<DashboardData> {
   const supabase = createServerSupabaseClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getEasternDateString();
 
   const [semaforoRes, planRes, metricsRes, ascensoRes] = await Promise.all([
     supabase
@@ -53,13 +54,17 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
         r_disponible: Number(plan.patrimonio) * (Number(plan.r_pct) / 100),
         sl_restante_dia: Number(plan.sl_diario_r) - Math.min(Number(metrics?.pnl_r_dia ?? 0), 0),
         sl_restante_semana:
-          Number(plan.sl_semanal_r) - Math.min(Number(metrics?.pnl_r_semana ?? 0), 0)
+          Number(plan.sl_semanal_r) - Math.min(Number(metrics?.pnl_r_semana ?? 0), 0),
+        apalancamiento_btceth_max: Number(plan.apalancamiento_btceth_max ?? 0),
+        apalancamiento_alts_max: Number(plan.apalancamiento_alts_max ?? 0),
+        plan_start_date: plan.effective_from?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
       }
     : null;
 
   const parsedIndicadores = semaforoRes.data?.indicadores_json as
     | {
         parsed?: { raw?: string };
+        error?: string | null;
       }
     | undefined;
 
@@ -69,7 +74,8 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
         estado: semaforoRes.data.estado,
         explicacion: semaforoRes.data.explicacion_gpt,
         computed_at: semaforoRes.data.computed_at ?? null,
-        analisis: parsedIndicadores?.parsed?.raw ?? null
+        analisis: parsedIndicadores?.parsed?.raw ?? null,
+        error: parsedIndicadores?.error ?? null
       }
     : null;
 

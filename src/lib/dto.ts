@@ -4,6 +4,7 @@ export type SemaforoState = {
   explicacion: string | null;
   computed_at: string | null;
   analisis: string | null;
+  error: string | null;
 };
 
 export type PlanSummary = {
@@ -17,6 +18,9 @@ export type PlanSummary = {
   r_disponible: number;
   sl_restante_dia: number;
   sl_restante_semana: number;
+  apalancamiento_btceth_max: number;
+  apalancamiento_alts_max: number;
+  plan_start_date: string;
 };
 
 export type PlanDetail = PlanSummary & {
@@ -40,6 +44,7 @@ export type PlanVersion = {
   sl_semanal_r: number;
   fase_actual: string;
   nivel_actual: string;
+  plan_start_date: string;
   effective_from: string;
   updated_at: string;
 };
@@ -87,39 +92,41 @@ export type TradeListItem = {
   sl: number;
   leverage: number;
   size_nominal: number;
+  quantity: number | null;
+  exit_price: number | null;
+  close_volume: number | null;
   risk_en_r: number;
+  risk_monetario: number | null;
   status: "open" | "closed" | "invalid";
   open_time: string;
   close_time: string | null;
   pnl_r: number | null;
+  pnl_monetario: number | null;
   cumplimiento_flags: string[];
 };
 
 export type TradesPageData = {
-  openTrades: TradeListItem[];
   closedTrades: TradeListItem[];
+  stats: TradesStats;
+  pagination: TradesPagination;
+};
+
+export type TradesStats = {
+  balance: number | null;
+  equity: number | null;
+  available_balance: number | null;
+  pnl_month: number;
+};
+
+export type TradesPagination = {
+  page: number;
+  pageSize: number;
+  total: number;
 };
 
 export type AscensoPageData = {
   summary: AscensoSummary | null;
   missions: Mission[];
-};
-
-export type WeeklyReportData = {
-  rango: {
-    inicio: string;
-    fin: string;
-  };
-  pnl_r: number;
-  pnl_monetario: number;
-  cumplimiento_pct: number;
-  streak_dias_verdes: number;
-  violaciones: {
-    sl_diario: number;
-    sl_semanal: number;
-  };
-  recomendacion_fase: string | null;
-  trades: TradeListItem[];
 };
 
 export type EmotionalLog = {

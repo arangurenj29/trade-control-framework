@@ -131,6 +131,9 @@ export type Database = {
           tp_json: Json | null;
           leverage: string;
           size_nominal: string;
+          quantity: string | null;
+          exit_price: string | null;
+          close_volume: string | null;
           risk_monetario: string;
           risk_en_r: string;
           open_time: string;
@@ -154,6 +157,9 @@ export type Database = {
           tp_json?: Json | null;
           leverage?: string;
           size_nominal: string;
+          quantity?: string | null;
+          exit_price?: string | null;
+          close_volume?: string | null;
           risk_monetario: string;
           risk_en_r: string;
           open_time?: string;

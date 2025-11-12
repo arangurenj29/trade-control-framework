@@ -34,6 +34,7 @@ export function PlanHistory({ versions }: { versions: PlanVersion[] }) {
               <TableHead>Patrimonio</TableHead>
               <TableHead>R %</TableHead>
               <TableHead>SL Diario</TableHead>
+              <TableHead>Inicio</TableHead>
               <TableHead>Actualizado</TableHead>
             </TableRow>
           </TableHeader>
@@ -47,6 +48,11 @@ export function PlanHistory({ versions }: { versions: PlanVersion[] }) {
                 <TableCell>{plan.patrimonio.toLocaleString("es-ES", { style: "currency", currency: "USD" })}</TableCell>
                 <TableCell>{plan.r_pct}%</TableCell>
                 <TableCell>{plan.sl_diario_r} R</TableCell>
+                <TableCell>
+                  {plan.plan_start_date
+                    ? format(new Date(plan.plan_start_date), "PP", { locale: es })
+                    : "—"}
+                </TableCell>
                 <TableCell>
                   {format(new Date(plan.updated_at), "PPpp", { locale: es })}
                 </TableCell>

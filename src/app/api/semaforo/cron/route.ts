@@ -1,25 +1,25 @@
 import { NextResponse } from "next/server";
-import { buildDefaultSemaforoInput } from "@/lib/services/semaforo";
+import { getSiteUrl } from "@/lib/server-url";
 
 export async function GET() {
-  const payload = buildDefaultSemaforoInput();
+  const siteUrl = getSiteUrl();
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  try {
+    const response = await fetch(`${siteUrl}/api/semaforo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auto: true })
+    });
 
-  const response = await fetch(`${siteUrl}/api/semaforo`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+    const raw = await response.text();
 
-  if (!response.ok) {
-    const text = await response.text();
-    return NextResponse.json(
-      { ok: false, error: text },
-      { status: 500 }
-    );
+    if (!response.ok) {
+      return NextResponse.json({ ok: false, error: raw }, { status: 500 });
+    }
+
+    const data = raw ? JSON.parse(raw) : null;
+    return NextResponse.json({ ok: true, data });
+  } catch (error) {
+    return NextResponse.json({ ok: false, error: (error as Error).message }, { status: 500 });
   }
-
-  const data = await response.json();
-  return NextResponse.json({ ok: true, data });
 }

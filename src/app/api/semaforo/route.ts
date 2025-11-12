@@ -1,56 +1,54 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createAdminSupabaseClient } from "@/lib/supabase/server";
-import {
-  buildSemaforoPrompt,
-  type SemaforoInput
-} from "@/lib/services/semaforo";
+import { buildSemaforoPrompt } from "@/lib/services/semaforo";
 import { env } from "@/lib/env";
+import { getEasternDateString } from "@/lib/dates";
 
-type OpenAIResponse = {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
+type ClaudeResponse = {
+  content: Array<
+    | {
+        type: "text";
+        text: string;
+      }
+    | {
+        type: string;
+        text?: string;
+      }
+  >;
 };
 
 export async function POST(request: Request) {
-  const payload = (await request.json()) as SemaforoInput & { retries?: number };
-  const prompt = buildSemaforoPrompt(payload);
-  const fecha = easternDate();
+  const body = await readRequestBody(request);
+  const bodyObject = (body && typeof body === "object" ? (body as Record<string, unknown>) : null) ?? null;
+  const shouldAutoGenerate = !bodyObject || Boolean((bodyObject as { auto?: boolean }).auto);
+  const retries = typeof (bodyObject as { retries?: number })?.retries === "number" ? (bodyObject as { retries?: number }).retries : 0;
+  const manualIndicators =
+    shouldAutoGenerate || !bodyObject
+      ? null
+      : buildManualIndicatorsPayload(bodyObject);
+
+  const prompt = buildSemaforoPrompt();
+  const fecha = getEasternDateString();
 
   console.info("[SEMAFORO][PROMPT]", fecha, "\n", prompt);
 
   let estado: "Verde" | "Amarillo" | "Rojo" | "Indeterminado" = "Indeterminado";
-  let explicacion =
-    "No se pudo obtener respuesta del modelo. Revisar manualmente.";
+  let explicacion = "No se pudo obtener respuesta del modelo. Revisar manualmente.";
   let structuredAnalysis: ParsedSemaforo | null = null;
   let errorMessage: string | null = null;
 
-  if (env.openAIApiKey) {
+  if (!env.claudeApiKey) {
+    errorMessage = "CLAUDE_API_KEY no configurado.";
+    explicacion = errorMessage;
+  } else {
     try {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${env.openAIApiKey}`
-        },
-        body: JSON.stringify({
-          model: env.semaforoModel,
-          temperature: 0,
-          messages: [
-            { role: "system", content: "Eres un analista de riesgo estricto." },
-            { role: "user", content: prompt }
-          ]
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`OpenAI error: ${await response.text()}`);
-      }
-      const completion = (await response.json()) as OpenAIResponse;
-      const content = completion.choices[0]?.message?.content ?? "";
+      const completion = await generateClaudeCompletion(prompt);
+      const content =
+        completion.content
+          ?.map((block) => ("text" in block ? block.text ?? "" : ""))
+          .join("\n")
+          .trim() ?? "";
       structuredAnalysis = parseSemaforoResponse(content);
       if (structuredAnalysis) {
         estado = structuredAnalysis.estado;
@@ -64,9 +62,8 @@ export async function POST(request: Request) {
       }
     } catch (error) {
       errorMessage = (error as Error).message;
+      explicacion = errorMessage.slice(0, 1000);
     }
-  } else {
-    errorMessage = "OPENAI_API_KEY no configurado.";
   }
 
   const supabase = createAdminSupabaseClient();
@@ -74,20 +71,10 @@ export async function POST(request: Request) {
     {
       fecha,
       estado,
-      indicadores_json: {
-        open_interest: payload.open_interest,
-        funding_rate: payload.funding_rate,
-        liquidation_map: payload.liquidation_map,
-        average_leverage_ratio: payload.average_leverage_ratio,
-        long_short_ratio: payload.long_short_ratio,
-        volume_variation_24h: payload.volume_variation_24h,
-        cdri: payload.cdri,
-        parsed: structuredAnalysis,
-        error: errorMessage
-      },
+      indicadores_json: buildIndicadoresJson(manualIndicators, structuredAnalysis, errorMessage),
       explicacion_gpt: explicacion,
       computed_at: new Date().toISOString(),
-      retries: payload.retries ?? 0
+      retries
     },
     { onConflict: "fecha" }
   );
@@ -103,26 +90,22 @@ export async function POST(request: Request) {
 
   revalidatePath("/dashboard");
 
+  const responseError = errorMessage;
+
   return NextResponse.json({
-    ok: true,
+    ok: !responseError,
     estado,
     explicacion,
-    error: errorMessage
+    error: responseError
   });
 }
 
-function easternDate() {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  });
-  const parts = formatter.formatToParts(new Date());
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-  return `${year}-${month}-${day}`;
+async function readRequestBody(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
 }
 
 function safeParseJSON(value: string) {
@@ -180,4 +163,101 @@ function parseSemaforoResponse(content: string): ParsedSemaforo | null {
 
 function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+function buildManualIndicatorsPayload(input: Record<string, unknown>) {
+  const filteredEntries = Object.entries(input).filter(
+    ([key]) => key !== "auto" && key !== "retries"
+  );
+  if (filteredEntries.length === 0) {
+    return null;
+  }
+  return Object.fromEntries(filteredEntries);
+}
+
+function buildIndicadoresJson(
+  manualIndicators: Record<string, unknown> | null,
+  structuredAnalysis: ParsedSemaforo | null,
+  errorMessage: string | null
+) {
+  return {
+    source: manualIndicators ? "manual" : "claude:auto",
+    payload: manualIndicators,
+    parsed: structuredAnalysis,
+    error: errorMessage,
+    note: manualIndicators
+      ? "Payload proporcionado manualmente. Claude no recibió datos estructurados."
+      : "Claude obtuvo los indicadores directamente desde sus fuentes."
+  };
+}
+
+class ClaudeAPIError extends Error {
+  constructor(message: string, readonly isModelMissing = false) {
+    super(message);
+    this.name = "ClaudeAPIError";
+  }
+}
+
+async function generateClaudeCompletion(prompt: string) {
+  const candidates = resolveModelCandidates();
+  let lastError: Error | null = null;
+
+  for (const model of candidates) {
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": env.claudeApiKey!,
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 800,
+          temperature: 0,
+          system: "Eres un analista de riesgo estricto.",
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+
+      if (!response.ok) {
+        const { error, raw } = await readClaudeError(response);
+        const isModelMissing = error?.type === "not_found_error" || /model:\s*/i.test(error?.message ?? "");
+        throw new ClaudeAPIError(`Claude error: ${raw}`, isModelMissing);
+      }
+
+      console.info("[SEMAFORO][CLAUDE] modelo utilizado:", model);
+      return (await response.json()) as ClaudeResponse;
+    } catch (error) {
+      lastError = error as Error;
+      const shouldFallback = error instanceof ClaudeAPIError && error.isModelMissing;
+      if (!shouldFallback) {
+        throw error;
+      }
+      console.warn(`[SEMAFORO][CLAUDE] modelo no disponible (${model}). Probando siguiente fallback...`);
+    }
+  }
+
+  throw lastError ?? new Error("Claude no disponible");
+}
+
+function resolveModelCandidates() {
+  const preferred = env.semaforoModel;
+  const fallbacks = [
+    "claude-3-5-sonnet-20240620",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307"
+  ];
+  const unique = [preferred, ...fallbacks].filter((model, index, arr) => model && arr.indexOf(model) === index);
+  return unique;
+}
+
+async function readClaudeError(response: Response) {
+  const raw = await response.text();
+  try {
+    return { raw, error: JSON.parse(raw).error as { type?: string; message?: string } };
+  } catch {
+    return { raw, error: null };
+  }
 }

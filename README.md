@@ -7,15 +7,15 @@ Aplicación web para operacionalizar disciplina de trading con planes versionabl
 - TypeScript + TailwindCSS (tokens tipo shadcn)
 - Supabase (Postgres + Auth + RLS)
 - React Query para caché cliente
-- OpenAI API para semáforo global (prompt determinista)
+- Anthropic Claude para semáforo global (prompt determinista)
 
 ## Requisitos previos
 - Node.js >= 18.18
 - Cuenta Supabase (project, anon key, service role opcional)
-- Clave OpenAI (o usar fallback manual)
+- Clave de Anthropic (Claude) o usar fallback manual
 
 ## Configuración
-1. Copia `.env.example` a `.env.local` y asigna tus claves. Recuerda duplicar la URL/anon key en las variables `NEXT_PUBLIC_…` para que el cliente pueda inicializar Supabase. Activa `DEBUG_LOGS`/`NEXT_PUBLIC_DEBUG_LOGS` cuando quieras ver eventos en la terminal.
+1. Copia `.env.example` a `.env.local` y asigna tus claves. Define `SITE_URL` con la URL pública de tu despliegue (en local déjalo como `http://localhost:3000`) y duplica la URL/anon key en las variables `NEXT_PUBLIC_…` para que el cliente pueda inicializar Supabase. Añade `CLAUDE_API_KEY` (y opcionalmente ajusta `CLAUDE_SEMAFORO_MODEL`, por defecto `claude-3-5-sonnet-20240620`) para habilitar el semáforo automático. Activa `DEBUG_LOGS`/`NEXT_PUBLIC_DEBUG_LOGS` cuando quieras ver eventos en la terminal.
 2. Ejecuta migraciones en Supabase con el contenido de `supabase/migrations/0001_initial.sql`.
 3. Instala dependencias:
    ```bash
@@ -30,15 +30,20 @@ Supabase usa RLS, por lo que crea al menos un usuario vía panel o `auth.signInW
 
 ## Jobs y semáforo
 - Endpoint `POST /api/semaforo` recibe indicadores y persiste el estado diario.
-- Ruta `/api/semaforo/cron` dispara una actualización con payload base; en Vercel se agenda cada 12 h vía `vercel.json`.
+- Ruta `/api/semaforo/cron` dispara una actualización con payload dinámico. Claude consulta directamente sus fuentes públicas (Binance, order books, datos on-chain, etc.) y devuelve el estado; si la llamada falla, se persiste estado *Indeterminado* con un mensaje visible en el dashboard. En Vercel se agenda cada 12 h vía `vercel.json`.
 - Prompt determinista en `src/lib/services/semaforo.ts`.
-- Si OpenAI falla o no hay API key, se guarda estado `Indeterminado` y se loguea en `audit_logs`.
+- Si Claude falla o no hay API key, se guarda estado `Indeterminado` y se loguea en `audit_logs`.
 
 ## Estructura destacada
 - `src/app/(dashboard)/*`: rutas autenticadas (dashboard, plan, trades, ascenso, bitácora, reportes).
 - `src/lib/actions/*`: server actions para plan y trades.
 - `src/lib/services/*`: consultas y agregados para UI/Jobs.
 - `supabase/migrations`: esquema, índices y políticas RLS.
+
+## Dashboard
+- Semáforo diario con análisis detallado y refresco manual.
+- Camino de Ascenso con métricas, rachas y XP.
+- Calculadora de posición nocional para estimar tamaño usando capital, % y apalancamiento.
 
 ## Tests
 Se usa Vitest. Ejecuta `npm test`. Incluye prueba de prompt determinista como ejemplo.
@@ -66,6 +71,7 @@ Se usa Vitest. Ejecuta `npm test`. Incluye prueba de prompt determinista como ej
 
 ## Trades automatizados
 - La aplicación lee las operaciones desde la tabla `trades` (puedes sembrar datos con `docs/sql/seed_dashboard_samples.sql`).
+- Define la fecha de inicio del plan en la sección “Mi Plan” y conecta tu cuenta de Bybit en `/integraciones`. Las credenciales se cifran antes de guardarse y puedes sincronizar hasta 90 días de historial cerrado (PnL). Cada sincronización almacena los registros en `bybit_pnl_history`, actualiza la tabla `trades` y toma un snapshot de balance para alimentar dashboard/ascenso.
 - El botón “Recalcular métricas” en `/trades` ejecuta las acciones de recomputo (`recomputeMetricsFromTrades` + `recomputeAscensoFromTrades`) y refresca Dashboard/Ascenso/Reportes.
 - Tras recalcular, `evaluatePlanProgress` aplica automáticamente las reglas de ascenso/descenso:
   * Promoción: cumplimiento ≥ 85% y (10 días verdes consecutivos o 10 TPs en la última semana).

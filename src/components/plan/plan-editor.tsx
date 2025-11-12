@@ -3,7 +3,7 @@
 import { useEffect, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { planSchema } from "@/lib/validations";
+import { levelOptions, phaseOptions, planSchema } from "@/lib/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,8 +26,9 @@ const defaultPlan: PlanFormValues = {
   no_trade_days: [],
   apalancamiento_btceth_max: 5,
   apalancamiento_alts_max: 3,
-  fase_actual: "Fase 1",
-  nivel_actual: "Nivel 1",
+  fase_actual: phaseOptions[1],
+  nivel_actual: levelOptions[0],
+  plan_start_date: new Date().toISOString().slice(0, 10),
   notes: ""
 };
 
@@ -173,13 +174,39 @@ export function PlanEditor({
         </div>
         <div className="space-y-2">
           <Label requiredIndicator>Fase actual</Label>
-          <Input {...register("fase_actual")} />
+          <select
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            {...register("fase_actual")}
+          >
+            {phaseOptions.map((phase) => (
+              <option key={phase} value={phase}>
+                {phase}
+              </option>
+            ))}
+          </select>
           <ErrorMessage message={errors.fase_actual?.message} />
         </div>
         <div className="space-y-2">
           <Label requiredIndicator>Nivel actual</Label>
-          <Input {...register("nivel_actual")} />
+          <select
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            {...register("nivel_actual")}
+          >
+            {levelOptions.map((level) => (
+              <option key={level} value={level}>
+                {level}
+              </option>
+            ))}
+          </select>
           <ErrorMessage message={errors.nivel_actual?.message} />
+          <p className="text-xs text-muted-foreground">
+            El motor de ascenso actualizará fase y nivel automáticamente cuando cumplas las reglas.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label requiredIndicator>Inicio del plan</Label>
+          <Input type="date" {...register("plan_start_date")} />
+          <ErrorMessage message={errors.plan_start_date?.message} />
         </div>
       </section>
 
