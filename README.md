@@ -16,7 +16,7 @@ Aplicación web para operacionalizar disciplina de trading con planes versionabl
 
 ## Configuración
 1. Copia `.env.example` a `.env.local` y asigna tus claves. Define `SITE_URL` con la URL pública de tu despliegue (en local déjalo como `http://localhost:3000`) y duplica la URL/anon key en las variables `NEXT_PUBLIC_…` para que el cliente pueda inicializar Supabase. Añade `CLAUDE_API_KEY` (y opcionalmente ajusta `CLAUDE_SEMAFORO_MODEL`, por defecto `claude-3-5-sonnet-20240620`) para habilitar el semáforo automático. Activa `DEBUG_LOGS`/`NEXT_PUBLIC_DEBUG_LOGS` cuando quieras ver eventos en la terminal.
-2. Ejecuta migraciones en Supabase con el contenido de `supabase/migrations/0001_initial.sql`.
+2. Ejecuta migraciones en Supabase con el contenido de `supabase/migrations/0001_full_schema.sql`.
 3. Instala dependencias:
    ```bash
    npm install
@@ -66,7 +66,7 @@ Se usa Vitest. Ejecuta `npm test`. Incluye prueba de prompt determinista como ej
 - Formularios y acciones validan entrada con Zod/TypeScript antes de persistir.
 - Supabase aplica RLS por `user_id` y las server actions nunca exponen claves sensibles.
 - Sigue las buenas prácticas OWASP: mantén las variables secretas fuera del cliente, usa HTTPS en producción y rota credenciales periódicamente.
-- Si migras desde versiones previas, añade las políticas de inserción/actualización sobre `metrics_daily` (ver `supabase/migrations/0001_initial.sql`).
+- Si migras desde versiones previas, añade las políticas de inserción/actualización sobre `metrics_daily` (ver `supabase/migrations/0001_full_schema.sql`).
 - Aplica también la política de inserción sobre `gamification_state` si ya tenías la base creada previamente.
 
 ## Trades automatizados

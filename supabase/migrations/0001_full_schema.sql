@@ -1,3 +1,12 @@
+-- Consolidated schema built from original migrations:
+-- 0001_initial.sql
+-- 0002_bybit_integration.sql
+-- 0003_bybit_pnl.sql
+-- 0004_bybit_pnl_unique.sql
+-- 0005_bybit_raw_trades_unique.sql
+-- 0006_trades_unique_external.sql
+-- 0007_trades_trade_details.sql
+
 create extension if not exists "uuid-ossp";
 
 create type semaforo_estado as enum ('Verde', 'Amarillo', 'Rojo', 'Indeterminado');
@@ -182,3 +191,104 @@ create index idx_trades_user_status on public.trades(user_id, status);
 create index idx_metrics_daily_user_fecha on public.metrics_daily(user_id, fecha);
 create index idx_global_semaforo_fecha on public.global_semaforo_daily(fecha);
 create index idx_emotional_logs_user_fecha on public.emotional_logs(user_id, log_date);
+create table public.bybit_connections (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  api_key_cipher text not null,
+  api_secret_cipher text not null,
+  status text not null default 'active' check (status in ('active', 'paused')),
+  last_synced_at timestamptz,
+  last_cursor text,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id)
+);
+
+create table public.bybit_raw_trades (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  connection_id uuid not null references public.bybit_connections(id) on delete cascade,
+  exec_id text not null,
+  order_id text,
+  payload jsonb not null,
+  traded_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, exec_id)
+);
+
+alter table public.trades
+  add column external_id text;
+
+create unique index if not exists idx_trades_user_external on public.trades(user_id, external_id)
+  where external_id is not null;
+
+create index idx_bybit_connections_user on public.bybit_connections(user_id);
+create index idx_bybit_raw_trades_user on public.bybit_raw_trades(user_id);
+
+alter table public.bybit_connections enable row level security;
+alter table public.bybit_raw_trades enable row level security;
+
+create policy "Users manage their Bybit connection" on public.bybit_connections
+  for all using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users manage their Bybit trades" on public.bybit_raw_trades
+  for all using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+create table public.bybit_pnl_history (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  order_id text not null,
+  symbol text not null,
+  side text,
+  qty numeric(18,8),
+  realised_pnl numeric(14,4),
+  fee numeric(14,4),
+  avg_entry_price numeric(18,8),
+  avg_exit_price numeric(18,8),
+  closed_size numeric(18,8),
+  leverage numeric(10,4),
+  closed_at timestamptz not null,
+  raw jsonb not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, order_id, closed_at)
+);
+
+create table public.account_balance_snapshots (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  source text not null default 'bybit',
+  balance numeric(18,8) not null,
+  equity numeric(18,8),
+  available_balance numeric(18,8),
+  captured_at timestamptz not null default now()
+);
+
+create index idx_bybit_pnl_user_closed_at on public.bybit_pnl_history(user_id, closed_at);
+create index idx_account_balance_user_time on public.account_balance_snapshots(user_id, captured_at desc);
+
+alter table public.bybit_pnl_history enable row level security;
+alter table public.account_balance_snapshots enable row level security;
+
+create policy "Users manage their Bybit PnL" on public.bybit_pnl_history
+  for all using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users manage their balance snapshots" on public.account_balance_snapshots
+  for all using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+alter table public.bybit_pnl_history
+  add constraint bybit_pnl_history_user_order_closed_key unique (user_id, order_id, closed_at);
+alter table public.bybit_raw_trades
+  add constraint bybit_raw_trades_user_exec_key unique (user_id, exec_id);
+alter table public.trades
+  add constraint trades_user_external_key unique (user_id, external_id);
+alter table public.trades
+  add column if not exists quantity numeric(18,8),
+  add column if not exists exit_price numeric(18,8),
+  add column if not exists close_volume numeric(18,8);
+
+comment on column public.trades.quantity is 'Contracts/size associated to the trade';
+comment on column public.trades.exit_price is 'Average exit price when the trade is closed';
+comment on column public.trades.close_volume is 'Notional value at close time (quantity * exit price)';
